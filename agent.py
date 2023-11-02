@@ -275,10 +275,10 @@ class DeepQLearningAgent(Agent):
             use_target_net=use_target_net,
             version=version,
         )
-        self.optimizer = optim.RMSprop(self._model.parameters(), lr=0.0005)
-        self.criterion = F.smooth_l1_loss  # Huber loss
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.reset_models()
+        self.optimizer = optim.RMSprop(self._model.parameters(), lr=0.0005)
+        self.criterion = F.smooth_l1_loss
 
     def reset_models(self):
         self._model = self._agent_model().to(self.device)
@@ -370,40 +370,68 @@ class DeepQLearningAgent(Agent):
 
             # Load model architecture from JSON
             with open(f"model_config/{version}.json", "r") as f:
-                m = json.loads(f.read())
+                m = json.load(f)
 
-            self.convs = nn.ModuleList()
-            self.denses = nn.ModuleList()
+            self.convs = (
+                nn.ModuleList()
+            )  # Use nn.ModuleList to store convolution layers
+            self.denses = nn.ModuleList()  # Use nn.ModuleList to store dense layers
+            in_channels = n_frames  # Assuming n_frames is the number of input channels
+            print(f"in_channels: {in_channels}")
 
-            # Convert JSON structure to PyTorch layers
-            # Note: Simplified conversion assuming a specific structure in the JSON.
-            # In a real scenario, you'd loop through layers and handle each type.
-            for layer in m["model"]:
-                l = m["model"][layer]
-                if "Conv2D" in layer:
+            for key, layer in m["model"].items():
+                print(f"key: {key}")
+                print(f"layer: {layer}")
+                if "Conv2D" in key:
                     self.convs.append(
                         nn.Conv2d(
-                            in_channels=l["filters_in"],
-                            out_channels=l["filters_out"],
-                            kernel_size=l["kernel_size"],
+                            in_channels=in_channels,
+                            out_channels=layer["filters"],
+                            kernel_size=tuple(layer["kernel_size"]),
                         )
                     )
-                if "Dense" in layer:
-                    self.denses.append(
-                        nn.Linear(
-                            in_features=l["units_in"], out_features=l["units_out"]
-                        )
-                    )
+                    self.convs.append(nn.ReLU())  # Apply ReLU after each Conv2D layer
+                    in_channels = layer["filters"]
+                    print(f"in_channels: {in_channels}")
 
-            # Assume last dense is for action values
-            self.out = nn.Linear(self.denses[-1].out_features, n_actions)
+            # After all convolutions, calculate the size of the flattened features
+            self.flatten = nn.Flatten()
+            flat_size = self._get_conv_output((board_size, board_size, in_channels))
+            print(f"flat_size: {flat_size}")
+
+            for key, layer in m["model"].items():
+                if "Dense" in key:
+                    dense = nn.Linear(flat_size, layer["units"])
+                    self.denses.append(dense)
+                    self.denses.append(nn.ReLU())  # Apply ReLU after each Dense layer
+                    flat_size = layer["units"]
+
+            self.out = nn.Linear(flat_size, n_actions)
+
+        def _get_conv_output(self, shape):
+            # Create a dummy input with the initial channel size
+            input = torch.autograd.Variable(torch.rand(1, *shape))
+            print(f"input: {input}")
+            # If shape is in the order of (H, W, C), permute it to (C, H, W)
+            input = input.permute(0, 3, 1, 2)
+            print(f"input.permute: {input}")
+
+            output_feat = self._forward_conv(input)
+            return int(np.prod(output_feat.size()))
+
+        def _forward_conv(self, x):
+            print(f"self.convs: {self.convs}")
+
+            for layer in self.convs:
+                print(f"layer: {layer}")
+                x = layer(x)  # Apply both Conv2D and ReLU layers in the list
+            return x
 
         def forward(self, x):
-            for conv in self.convs:
-                x = F.relu(conv(x))
-            x = x.view(x.size(0), -1)
-            for dense in self.denses:
-                x = F.relu(dense(x))
+            x = self._forward_conv(x)
+            x = self.flatten(x)  # Flatten the convolutional layer's output
+            for layer in self.denses:
+                x = layer(x)  # Apply both Linear and ReLU layers in the list
             return self.out(x)
 
     def _agent_model(self):
