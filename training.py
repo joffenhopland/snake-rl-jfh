@@ -13,18 +13,19 @@ import pandas as pd
 import time
 from utils import play_game, play_game2
 from game_environment import Snake, SnakeNumpy
+import torch
 
 # import tensorflow as tf
 from agent import (
     DeepQLearningAgent,
-    PolicyGradientAgent,
-    AdvantageActorCriticAgent,
-    mean_huber_loss,
+    # PolicyGradientAgent,
+    # AdvantageActorCriticAgent,
+    # mean_huber_loss,
 )
 import json
 
 # some global variables
-# tf.random.set_seed(42)
+torch.manual_seed(42)
 version = "v17.1"
 
 # get training configurations
@@ -60,11 +61,11 @@ agent = DeepQLearningAgent(
 # check in the same order as class hierarchy
 if isinstance(agent, DeepQLearningAgent):
     agent_type = "DeepQLearningAgent"
-if isinstance(agent, PolicyGradientAgent):
-    agent_type = "PolicyGradientAgent"
-if isinstance(agent, AdvantageActorCriticAgent):
-    agent_type = "AdvantageActorCriticAgent"
-print("Agent is {:s}".format(agent_type))
+# if isinstance(agent, PolicyGradientAgent):
+#     agent_type = "PolicyGradientAgent"
+# if isinstance(agent, AdvantageActorCriticAgent):
+#     agent_type = "AdvantageActorCriticAgent"
+# print("Agent is {:s}".format(agent_type))
 
 # setup the epsilon range and decay rate for epsilon
 # define rewrad type and update frequency, see utils for more details
@@ -232,6 +233,7 @@ for index in tqdm(range(episodes)):
     # copy weights to target network and save models
     if (index + 1) % log_frequency == 0:
         agent.update_target_net()
-        agent.save_model(file_path="models/{:s}".format(version), iteration=(index + 1))
+        # Save the model with the new save_model function
+        agent.save_model(file_path=f"models/{version}/model", iteration=index + 1)
         # keep some epsilon alive for training
         epsilon = max(epsilon * decay, epsilon_end)
