@@ -31,7 +31,10 @@ class Agent:
         self._gamma = gamma
         self._use_target_net = use_target_net
         self._version = version
-        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self._device = torch.device(
+            "mps" if torch.backends.mps.is_available() else "cpu"
+        )
 
         # Initialize replay buffer (assuming a ReplayBuffer class exists)
         self._buffer = ReplayBufferNumpy(
@@ -130,12 +133,14 @@ class QNetwork(nn.Module):
             nn.Linear(256, n_actions),
         )
 
+    # Rest of the class remains unchanged
+
     def _get_conv_out(self, shape):
         o = self.conv(torch.zeros(1, *shape))
         return int(np.prod(o.size()))
 
     def forward(self, x):
-        print("In forward, input shape:", x.shape)
+        # print("In forward, input shape:", x.shape)
         # Permute the input if it's not in the 'channel-first' format
         if x.size(1) != self.conv[0].in_channels:
             x = x.permute(
@@ -144,6 +149,113 @@ class QNetwork(nn.Module):
 
         conv_out = self.conv(x)
         # Use reshape instead of view here
+        conv_out = conv_out.reshape(conv_out.size(0), -1)
+        return self.fc(conv_out)
+
+
+class DuelingQNetwork(nn.Module):
+    def __init__(self, input_shape, n_actions):
+        super(DuelingQNetwork, self).__init__()
+        # Define a sequence of convolutional layers
+        self.conv = nn.Sequential(
+            nn.Conv2d(input_shape[0], 32, kernel_size=3, stride=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=3, stride=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.Conv2d(64, 128, kernel_size=3, stride=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(),
+            nn.Flatten(),
+        )
+
+        # Calculate the output size of the convolutional layers
+        conv_out_size = self._get_conv_out(input_shape)
+
+        # Define two separate streams for the dueling architecture
+        # Stream for state value
+        self.fc_value = nn.Sequential(
+            nn.Linear(conv_out_size, 256),
+            nn.ReLU(),
+            nn.Linear(256, 1),  # Outputs a single value for the state value
+        )
+
+        # Stream for advantage
+        self.fc_advantage = nn.Sequential(
+            nn.Linear(conv_out_size, 256),
+            nn.ReLU(),
+            nn.Linear(
+                256, n_actions
+            ),  # Outputs one value per action (the advantage of each action)
+        )
+
+    def _get_conv_out(self, shape):
+        o = self.conv(torch.zeros(1, *shape))
+        return int(np.prod(o.size()))
+
+    def forward(self, x):
+        if x.size(1) != self.conv[0].in_channels:
+            x = x.permute(0, 3, 1, 2)
+
+        conv_out = self.conv(x)
+        conv_out = conv_out.view(conv_out.size(0), -1)
+
+        # Calculate the value and advantage streams
+        value = self.fc_value(conv_out)
+        advantage = self.fc_advantage(conv_out)
+
+        # Combine the value and advantage to get the final Q values
+        # Here, we subtract the mean of the advantage to stabilize training
+        q_values = value + (advantage - advantage.mean(dim=1, keepdim=True))
+
+        return q_values
+
+
+class AdvancedQNetwork(nn.Module):
+    def __init__(self, input_shape, n_actions):
+        super(AdvancedQNetwork, self).__init__()
+        # Define a more complex sequence of convolutional layers
+        self.conv = nn.Sequential(
+            nn.Conv2d(input_shape[0], 32, kernel_size=3, stride=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=3, stride=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.Conv2d(64, 128, kernel_size=3, stride=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(),
+            nn.Conv2d(128, 256, kernel_size=3, stride=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(),
+            nn.Flatten(),
+        )
+        conv_out_size = self._get_conv_out(input_shape)
+
+        # Define more complex fully connected layers
+        self.fc = nn.Sequential(
+            nn.Linear(conv_out_size, 256),
+            nn.ReLU(),
+            nn.Dropout(p=0.2),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Dropout(p=0.2),
+            nn.Linear(128, n_actions),
+        )
+
+    def _get_conv_out(self, shape):
+        o = self.conv(torch.zeros(1, *shape))
+        return int(np.prod(o.size()))
+
+    def forward(self, x):
+        # Permute the input if it's not in the 'channel-first' format
+        if x.size(1) != self.conv[0].in_channels:
+            x = x.permute(
+                0, 3, 1, 2
+            )  # Change from [batch, H, W, C] to [batch, C, H, W]
+
+        conv_out = self.conv(x)
         conv_out = conv_out.reshape(conv_out.size(0), -1)
         return self.fc(conv_out)
 
@@ -186,6 +298,12 @@ class DeepQLearningAgent(Agent):  # Inherits from Agent
         return QNetwork(
             (self._frames, self._board_size, self._board_size), self._n_actions
         )
+        # return DuelingQNetwork(
+        #     (self._frames, self._board_size, self._board_size), self._n_actions
+        # )
+        # return AdvancedQNetwork(
+        #     (self._frames, self._board_size, self._board_size), self._n_actions
+        # )
 
     def _prepare_input(self, s):
         # Normalize the board state if necessary
@@ -256,6 +374,10 @@ class DeepQLearningAgent(Agent):  # Inherits from Agent
             next_q_values = self._target_net(next_s).max(1)[0]
         else:
             next_q_values = self._model(next_s).max(1)[0]
+
+            # Make sure r and done have the correct shape [batch_size]
+        r = r.squeeze()  # r should be a 1D tensor with shape [batch_size]
+        done = done.squeeze()  # done should be a 1D tensor with shape [batch_size]
 
         # Compute the expected Q values
         expected_q_values = r + self._gamma * next_q_values * (1 - done)
