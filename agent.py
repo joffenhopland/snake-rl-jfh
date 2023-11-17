@@ -36,7 +36,7 @@ class Agent:
             "mps" if torch.backends.mps.is_available() else "cpu"
         )
 
-        self._buffer = ReplayBuffer(
+        self._buffer = ReplayBufferNumpy(
             self._buffer_size, self._board_size, self._frames, self._n_actions
         )
 
@@ -76,7 +76,7 @@ class Agent:
         """Resets the replay buffer with a new size if provided."""
         if buffer_size is not None:
             self._buffer_size = buffer_size
-        self._buffer = ReplayBuffer(
+        self._buffer = ReplayBufferNumpy(
             self._buffer_size, self._board_size, self._frames, self._n_actions
         )
 
