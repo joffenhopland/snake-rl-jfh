@@ -15,12 +15,8 @@ from utils import play_game, play_game2
 from game_environment import Snake, SnakeNumpy
 import torch
 
-# import tensorflow as tf
 from agent import (
     DeepQLearningAgent,
-    # PolicyGradientAgent,
-    # AdvantageActorCriticAgent,
-    # mean_huber_loss,
 )
 import json
 
@@ -52,20 +48,12 @@ agent = DeepQLearningAgent(
     buffer_size=buffer_size,
     version=version,
 )
-# agent = PolicyGradientAgent(board_size=board_size, frames=frames, n_actions=n_actions,
-# buffer_size=2000, version=version)
-# agent = AdvantageActorCriticAgent(board_size=board_size, frames=frames, n_actions=n_actions,
-# buffer_size=10000, version=version)
-# agent.print_models()
+
 
 # check in the same order as class hierarchy
 if isinstance(agent, DeepQLearningAgent):
     agent_type = "DeepQLearningAgent"
-# if isinstance(agent, PolicyGradientAgent):
-#     agent_type = "PolicyGradientAgent"
-# if isinstance(agent, AdvantageActorCriticAgent):
-#     agent_type = "AdvantageActorCriticAgent"
-# print("Agent is {:s}".format(agent_type))
+
 
 # setup the epsilon range and decay rate for epsilon
 # define rewrad type and update frequency, see utils for more details

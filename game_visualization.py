@@ -4,13 +4,10 @@
 import numpy as np
 from agent import DeepQLearningAgent
 
-# , PolicyGradientAgent, \
-#         AdvantageActorCriticAgent, HamiltonianCycleAgent, BreadthFirstSearchAgent
 from game_environment import Snake, SnakeNumpy
 from utils import visualize_game
 import json
 
-# import keras.backend as K
 
 # some global variables
 version = "v17.1"
@@ -47,10 +44,6 @@ agent = DeepQLearningAgent(
     buffer_size=10,
     version=version,
 )
-# agent = PolicyGradientAgent(board_size=board_size, frames=frames, n_actions=n_actions, buffer_size=10)
-# agent = AdvantageActorCriticAgent(board_size=board_size, frames=frames, n_actions=n_actions, buffer_size=10)
-# agent = HamiltonianCycleAgent(board_size=board_size, frames=frames, n_actions=n_actions, buffer_size=10)
-# agent = BreadthFirstSearchAgent(board_size=board_size, frames=frames, n_actions=n_actions, buffer_size=10)
 
 for iteration in iteration_list:
     agent.load_model(file_path=f"models/{version}/model", iteration=iteration)
