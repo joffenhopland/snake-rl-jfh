@@ -36,7 +36,7 @@ with open("model_config/{:s}.json".format(version), "r") as f:
     buffer_size = m["buffer_size"]
 
 # define no of episodes, logging frequency
-episodes = 2 * (10**5)
+episodes = 6 * (10**5)
 log_frequency = 500
 games_eval = 8
 
@@ -85,7 +85,7 @@ if agent_type in ["AdvantageActorCriticAgent"]:
     n_games_training = 32
     decay = 1
 
-# decay = np.exp(np.log((epsilon_end/epsilon))/episodes)
+decay = np.exp(np.log((epsilon_end / epsilon)) / episodes)
 
 # use only for DeepQLearningAgent
 if agent_type in ["DeepQLearningAgent"]:
